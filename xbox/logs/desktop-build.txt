@@ -1,0 +1,15 @@
+﻿Desktop audit build
+Command: dotnet build --no-restore /p:EnableMGCBItems=false /p:Configuration=Debug
+WorkingDirectory: C:\Users\Willi\scpcb
+
+  Unhandled exception: Failed to read NuGet.Config due to unauthorized access. Path: 'C:\Users\Willi\AppData\Roaming\NuGet\NuGet.Config'.
+C:\Users\Willi\.nuget\packages\monogame.content.builder.task\3.8.4.1\build\MonoGame.Content.Builder.Task.targets(139,5): warning MSB3073: The command ""dotnet" tool restore" exited with code 1. [C:\Users\Willi\scpcb\scpcb.csproj]
+  scpcb -> C:\Users\Willi\scpcb\bin\Debug\net9.0\scpcb.dll
+
+Build succeeded.
+
+C:\Users\Willi\.nuget\packages\monogame.content.builder.task\3.8.4.1\build\MonoGame.Content.Builder.Task.targets(139,5): warning MSB3073: The command ""dotnet" tool restore" exited with code 1. [C:\Users\Willi\scpcb\scpcb.csproj]
+    1 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:01.19

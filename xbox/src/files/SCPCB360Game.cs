@@ -2,9 +2,7 @@
 // Temporary debug boot: loads one cooked 173 room model directly in front of the camera.
 
 using System;
-using System.Collections.Generic;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Audio;
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
 using SCPCB360.Engine;
@@ -17,8 +15,6 @@ namespace SCPCB360
     {
         private GraphicsDeviceManager _gdm;
         private SpriteBatch _sb;
-        private Texture2D _whitePixel;
-        private SoundEffect _aButtonSound;
 
         private int _camPivot;
         private int _cam;
@@ -30,42 +26,6 @@ namespace SCPCB360
         private const float PlayerMoveSpeed = 3.0f;
 
         private bool _paused = false;
-        private float _fps;
-        private float _fpsTimer;
-        private int _fpsFrames;
-
-        private static readonly Dictionary<char, string[]> TechFont = new()
-        {
-            [' '] = new[] { "000", "000", "000", "000", "000", "000", "000" },
-            [':'] = new[] { "0", "1", "1", "0", "1", "1", "0" },
-            ['.'] = new[] { "0", "0", "0", "0", "0", "1", "1" },
-            ['-'] = new[] { "000", "000", "000", "111", "000", "000", "000" },
-            ['0'] = new[] { "111", "101", "101", "101", "101", "101", "111" },
-            ['1'] = new[] { "010", "110", "010", "010", "010", "010", "111" },
-            ['2'] = new[] { "111", "001", "001", "111", "100", "100", "111" },
-            ['3'] = new[] { "111", "001", "001", "111", "001", "001", "111" },
-            ['4'] = new[] { "101", "101", "101", "111", "001", "001", "001" },
-            ['5'] = new[] { "111", "100", "100", "111", "001", "001", "111" },
-            ['6'] = new[] { "111", "100", "100", "111", "101", "101", "111" },
-            ['7'] = new[] { "111", "001", "001", "010", "010", "010", "010" },
-            ['8'] = new[] { "111", "101", "101", "111", "101", "101", "111" },
-            ['9'] = new[] { "111", "101", "101", "111", "001", "001", "111" },
-            ['A'] = new[] { "111", "101", "101", "111", "101", "101", "101" },
-            ['B'] = new[] { "110", "101", "101", "110", "101", "101", "110" },
-            ['C'] = new[] { "111", "100", "100", "100", "100", "100", "111" },
-            ['D'] = new[] { "110", "101", "101", "101", "101", "101", "110" },
-            ['E'] = new[] { "111", "100", "100", "111", "100", "100", "111" },
-            ['F'] = new[] { "111", "100", "100", "111", "100", "100", "100" },
-            ['H'] = new[] { "101", "101", "101", "111", "101", "101", "101" },
-            ['M'] = new[] { "101", "111", "111", "101", "101", "101", "101" },
-            ['O'] = new[] { "111", "101", "101", "101", "101", "101", "111" },
-            ['P'] = new[] { "111", "101", "101", "111", "100", "100", "100" },
-            ['S'] = new[] { "111", "100", "100", "111", "001", "001", "111" },
-            ['T'] = new[] { "111", "010", "010", "010", "010", "010", "010" },
-            ['X'] = new[] { "101", "101", "101", "010", "101", "101", "101" },
-            ['Y'] = new[] { "101", "101", "101", "010", "010", "010", "010" },
-            ['Z'] = new[] { "111", "001", "001", "010", "100", "100", "111" },
-        };
 
         public SCPCB360Game()
         {
@@ -101,9 +61,6 @@ namespace SCPCB360
         protected override void LoadContent()
         {
             _sb = new SpriteBatch(GraphicsDevice);
-            _whitePixel = new Texture2D(GraphicsDevice, 1, 1);
-            _whitePixel.SetData(new[] { Color.White });
-            _aButtonSound = CreateTechDemoBeep();
 
             Console.WriteLine("SCPCB360 debug LoadContent started.");
 
@@ -191,13 +148,6 @@ namespace SCPCB360
                 return;
             }
 
-            if (XInputRouter.IsPressed(CBAction.Interact))
-            {
-                _aButtonSound?.Play(0.6f, 0f, 0f);
-                XInputRouter.Rumble(0.2f, 0.35f, 0.08f);
-                Console.WriteLine("Tech Demo: A pressed");
-            }
-
             var look = XInputRouter.GetLookDelta();
             _playerYaw += look.X;
             _playerPitch = MathHelper.Clamp(_playerPitch - look.Y, -PitchLimit, PitchLimit);
@@ -235,7 +185,6 @@ namespace SCPCB360
                 B3D.PositionEntity(_camPivot, 0f, 1.7f, 0f);
 
             PhysicsSystem.Update();
-            UpdateFps(delta);
             base.Update(gameTime);
         }
 
@@ -243,87 +192,7 @@ namespace SCPCB360
         {
             GraphicsDevice.Clear(new Color(10, 10, 12));
             RenderSystem.Draw();
-            DrawTechDemoOverlay();
             base.Draw(gameTime);
-        }
-
-        private void UpdateFps(float delta)
-        {
-            _fpsTimer += delta;
-            _fpsFrames++;
-
-            if (_fpsTimer >= 0.25f)
-            {
-                _fps = _fpsFrames / _fpsTimer;
-                _fpsFrames = 0;
-                _fpsTimer = 0f;
-            }
-        }
-
-        private void DrawTechDemoOverlay()
-        {
-            if (_whitePixel == null || _sb == null)
-                return;
-
-            var player = B3D.Get(_playerEnt);
-            var pos = player?.GetWorldPosition() ?? Vector3.Zero;
-
-            _sb.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
-
-            DrawText("SCPCB360 TECH DEMO", 18, 18, 4, new Color(220, 235, 255));
-            DrawText("FPS: " + _fps.ToString("0.0"), 18, 54, 3, new Color(170, 220, 170));
-            DrawText(
-                "POS: X " + pos.X.ToString("0.00") +
-                " Y " + pos.Y.ToString("0.00") +
-                " Z " + pos.Z.ToString("0.00"),
-                18,
-                82,
-                3,
-                new Color(220, 220, 190));
-
-            _sb.End();
-        }
-
-        private void DrawText(string text, int x, int y, int scale, Color color)
-        {
-            int cursor = x;
-
-            foreach (char raw in text.ToUpperInvariant())
-            {
-                if (!TechFont.TryGetValue(raw, out var glyph))
-                    glyph = TechFont[' '];
-
-                for (int row = 0; row < glyph.Length; row++)
-                {
-                    for (int col = 0; col < glyph[row].Length; col++)
-                    {
-                        if (glyph[row][col] == '1')
-                            _sb.Draw(_whitePixel, new Rectangle(cursor + col * scale, y + row * scale, scale, scale), color);
-                    }
-                }
-
-                cursor += (glyph[0].Length + 1) * scale;
-            }
-        }
-
-        private static SoundEffect CreateTechDemoBeep()
-        {
-            const int sampleRate = 22050;
-            const float duration = 0.12f;
-            const float frequency = 660f;
-            int samples = (int)(sampleRate * duration);
-            byte[] buffer = new byte[samples * 2];
-
-            for (int i = 0; i < samples; i++)
-            {
-                float t = i / (float)sampleRate;
-                float fade = 1f - (i / (float)samples);
-                short value = (short)(Math.Sin(t * frequency * MathHelper.TwoPi) * fade * short.MaxValue * 0.35f);
-                buffer[i * 2] = (byte)(value & 0xff);
-                buffer[i * 2 + 1] = (byte)((value >> 8) & 0xff);
-            }
-
-            return new SoundEffect(buffer, sampleRate, AudioChannels.Mono);
         }
 
         private static string FindRMeshPath(string fileName)

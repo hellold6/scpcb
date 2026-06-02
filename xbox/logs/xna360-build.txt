@@ -1,0 +1,12 @@
+﻿XNA 4.0 Xbox 360 build attempt
+Project: C:\Users\Willi\scpcb\xbox\SCPCB360.Xna360.csproj
+Configuration: Debug
+Platform: Xbox 360
+
+BLOCKER: XNA 4.0 Game Studio MSBuild targets were not found.
+Expected one of:
+  C:\Program Files (x86)\MSBuild\Microsoft\XNA Game Studio\Microsoft.Xna.GameStudio.targets
+  C:\Program Files\MSBuild\Microsoft\XNA Game Studio\Microsoft.Xna.GameStudio.targets
+
+This machine may have XNA runtime/redist files, but not the developer build targets required for an Xbox 360 XNA project.
+No placeholder assemblies or fake references were used.

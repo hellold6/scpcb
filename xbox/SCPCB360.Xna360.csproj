@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ProjectGuid>{C4C4D568-7360-4A3F-9DE5-55593F783600}</ProjectGuid>
+    <ProjectTypeGuids>{D399B71A-8929-442A-A9AC-8BEC78BB2433};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>SCPCB360</RootNamespace>
+    <AssemblyName>SCPCB360.Xna360</AssemblyName>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <XnaFrameworkVersion>v4.0</XnaFrameworkVersion>
+    <XnaPlatform>Xbox 360</XnaPlatform>
+    <XnaProfile>Reach</XnaProfile>
+    <XnaCrossPlatformGroupID>{8F71B3E2-C03A-48B9-A68A-EE107A4D2516}</XnaCrossPlatformGroupID>
+    <XnaOutputType>Game</XnaOutputType>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|Xbox 360'">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Xbox360\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE;XBOX;XBOX360</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|Xbox 360'">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Xbox360\Release\</OutputPath>
+    <DefineConstants>TRACE;XBOX;XBOX360</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Microsoft.Xna.Framework" />
+    <Reference Include="Microsoft.Xna.Framework.Game" />
+    <Reference Include="Microsoft.Xna.Framework.Graphics" />
+    <Reference Include="Microsoft.Xna.Framework.GamerServices" />
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="src\Program.cs" />
+    <Compile Include="src\files\Blitz3D.cs" />
+    <Compile Include="src\files\BlitzEntity.cs" />
+    <Compile Include="src\files\MapSystem.cs" />
+    <Compile Include="src\files\NPCSystem.cs" />
+    <Compile Include="src\files\PhysicsSystem.cs" />
+    <Compile Include="src\files\RenderSystem.cs" />
+    <Compile Include="src\files\RMeshReader.cs" />
+    <Compile Include="src\files\SCPCB360Game.cs" />
+    <Compile Include="src\files\XInputRouter.cs" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\XNA Game Studio\Microsoft.Xna.GameStudio.targets"
+          Condition="Exists('$(MSBuildExtensionsPath32)\Microsoft\XNA Game Studio\Microsoft.Xna.GameStudio.targets')" />
+</Project>
