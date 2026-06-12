@@ -3,21 +3,40 @@
 ## Project Structure
 
 ```
-SCPCB360/
-├── SCPCB360Game.cs            ← Main game class (replaces Main.bb entry point)
-├── Engine/
-│   ├── BlitzEntity.cs         ← Entity base class (pivots, meshes, cameras, lights)
-│   ├── Blitz3D.cs             ← Static B3D.* API (mirrors Blitz3D command surface)
-│   ├── PhysicsSystem.cs       ← Collision pair resolution
-│   └── RenderSystem.cs        ← XNA draw loop with fog + alpha sorting
-├── Input/
-│   └── XInputRouter.cs        ← Win32 mouse/keyboard → Xbox 360 XInput
-├── GameLogic/
-│   ├── NPCSystem.cs           ← BlitzBasic Type/Each → C# List<NPC>
-│   └── MapSystem.cs           ← Room loading, procedural map generation
-└── Assets/
-    └── cook_assets.py         ← PC-side OBJ→FBX→XNB + texture + audio pipeline
+repo root/
+├── Program.cs                 ← Entry point
+├── scpcb.csproj               ← .NET 9 + MonoGame DesktopGL
+├── files/                     ← All ported C# (namespace SCPCB360.*)
+│   ├── SCPCB360Game.cs        ← Main game loop (Main.bb + Update.bb)
+│   ├── GameBootstrap.cs       ← InitNewGame / InitLoadGame
+│   ├── GameState.cs           ← Global game state
+│   ├── Blitz3D.cs             ← Static B3D.* API (SCPCB360.Engine)
+│   ├── BlitzEntity.cs
+│   ├── RenderSystem.cs
+│   ├── RMeshReader.cs         ← Runtime .rmesh parser
+│   ├── PhysicsSystem.cs
+│   ├── MapSystem.cs           ← CreateMap, CreateRoom, LoadRoom
+│   ├── FillRoomSystem.cs      ← FillRoom() per-room setup
+│   ├── RoomTemplateSystem.cs  ← rooms.ini templates
+│   ├── EventSystem.cs         ← UpdateEvents port (+ partials)
+│   ├── NPCSystem.cs
+│   ├── ItemSystem.cs
+│   ├── SaveSystem.cs
+│   ├── PlayerSystem.cs
+│   ├── DoorSystem.cs
+│   ├── AudioSystem.cs
+│   ├── XInputRouter.cs        ← SCPCB360.Input
+│   ├── cook_assets.py         ← OBJ→FBX→XNB pipeline
+│   └── PORTING_REFERENCE.md   ← This file
+├── Data/                      ← INI configs (copied to build output)
+├── GFX/                       ← Textures, RMESH, models (copied to output)
+├── SFX/                       ← Audio source
+├── Content/Content.mgcb       ← MonoGame content manifest
+├── docs/                      ← Port documentation (see docs/README.md)
+└── xbox/                      ← Xbox 360 migration kit (excluded from desktop build)
 ```
+
+See [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) for boot flow and system diagrams.
 
 ---
 
@@ -80,7 +99,8 @@ private GameState _state = GameState.Playing;
 | Blitz3D Command | C# Equivalent |
 |---|---|
 | `CreatePivot([parent])` | `B3D.CreatePivot([parent])` |
-| `LoadMesh(path$, [parent])` | `B3D.LoadMesh(path, [parent])` |
+| `LoadMesh(path$, [parent])` | `B3D.LoadMesh(path, [parent])` — cooked `.xnb` via ContentManager |
+| `LoadRMesh(file$)` (rooms) | `B3D.LoadRMesh(rmeshPath)` — runtime `.rmesh` via `RMeshReader` |
 | `CreateCamera([parent])` | `B3D.CreateCamera([parent])` |
 | `CreateLight([type])` | `B3D.CreateLight([type])` |
 | `CopyEntity(e, [parent])` | `B3D.CopyEntity(e, [parent])` |

@@ -13,3 +13,19 @@ error_log_*
 updates/
 Thumbs.db
 *.SI
+
+# .NET / MonoGame build output
+bin/
+obj/
+*.user
+*.suo
+
+# Agent session artifacts
+agent-tools/
+terminals/
+
+# MGCB native deps (platform-specific; copy from NuGet on x64)
+Content/assimp.dll
+Content/.mgstats
+Content/obj/
+Content/bin/

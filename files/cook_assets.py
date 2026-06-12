@@ -94,6 +94,11 @@ def parse_args():
     p.add_argument("--skip-mesh",  action="store_true")
     p.add_argument("--skip-tex",   action="store_true")
     p.add_argument("--skip-audio", action="store_true")
+    p.add_argument("--mgcb",       action="store_true",
+                   help="Regenerate DesktopGL Content/Content.mgcb from GFX/map/*_opt.obj")
+    p.add_argument("--platform",   default="DesktopGL",
+                   choices=["DesktopGL", "Xbox360"],
+                   help="MGCB target platform (default: DesktopGL)")
     return p.parse_args()
 
 
@@ -108,14 +113,22 @@ def main():
     print(f"[cook] Source : {src}")
     print(f"[cook] Output : {out}")
     print(f"[cook] Workers: {args.jobs}")
+    print(f"[cook] Platform: {args.platform}")
     print()
+
+    if args.mgcb:
+        mgcb_path = Path(__file__).resolve().parents[1] / "Content" / "Content.mgcb"
+        generate_mgcb(src, mgcb_path, args.platform, args.dry)
+        print(f"[cook] Wrote {mgcb_path}")
+        if args.skip_mesh and args.skip_tex and args.skip_audio:
+            sys.exit(0)
 
     # 1. Mesh pipeline: .obj → .fbx → .xnb
     if not args.skip_mesh:
         objs = list((src / "GFX" / "map").glob("*.obj"))
         print(f"[cook] Meshes: {len(objs)} .obj files")
         with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-            futs = {pool.submit(cook_mesh, f, out, args.dry): f for f in objs}
+            futs = {pool.submit(cook_mesh, f, out, args.dry, args.platform): f for f in objs}
             for fut in as_completed(futs):
                 ok, msg = fut.result()
                 if ok:  results["ok"] += 1
@@ -145,13 +158,124 @@ def main():
                 if ok:  results["ok"] += 1
                 else:   results["fail"] += 1; print(f"  FAIL {msg}")
 
+    manifest = write_manifest(src, out, args.dry)
+    print(f"[cook] Manifest: {manifest} ({manifest.stat().st_size if manifest.exists() else 0} bytes)")
+
     print(f"\n[cook] Done — OK={results['ok']}  FAIL={results['fail']}")
     sys.exit(0 if results["fail"] == 0 else 1)
 
 
+def write_manifest(src: Path, out: Path, dry: bool) -> Path:
+    """Emit asset_manifest.json for DesktopGL Content.mgcb / dev fallback paths."""
+    meshes = sorted(str(p.relative_to(src)).replace("\\", "/")
+                    for p in (src / "GFX" / "map").glob("*.obj"))
+    textures = sorted(str(p.relative_to(src)).replace("\\", "/")
+                      for p in (src / "GFX").rglob("*")
+                      if p.suffix.lower() in (".jpg", ".png", ".bmp"))
+    audio = sorted(str(p.relative_to(src)).replace("\\", "/")
+                   for p in (src / "SFX").rglob("*")
+                   if p.suffix.lower() in (".ogg", ".wav"))
+
+    manifest = {
+        "version": 1,
+        "source": str(src),
+        "output": str(out),
+        "meshes": meshes,
+        "textures": textures,
+        "audio": audio,
+        "desktopgl_notes": "Reference paths for MGCB Content pipeline; Xbox build uses cooked .xnb under output.",
+    }
+    path = out / "asset_manifest.json"
+    if not dry:
+        path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    else:
+        print(f"  DRY: would write manifest with {len(meshes)} meshes, {len(textures)} textures, {len(audio)} audio")
+    return path
+
+
 # ─── Mesh cooker ───────────────────────────────────────────────────────────────
 
-def cook_mesh(obj_path: Path, out_root: Path, dry: bool) -> tuple[bool, str]:
+MGCB_MODEL_PARAMS = """\
+/importer:OpenAssetImporter
+/processor:ModelProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:DefaultEffect=BasicEffect
+/processorParam:GenerateMipmaps=True
+/processorParam:GenerateTangentFrames=False
+/processorParam:PremultiplyTextureAlpha=True
+/processorParam:PremultiplyVertexColors=True
+/processorParam:ResizeTexturesToPowerOfTwo=False
+/processorParam:RotationX=0
+/processorParam:Scale=1
+/processorParam:SwapWindingOrder=False
+/processorParam:TextureFormat=Color"""
+
+
+def generate_mgcb(src: Path, mgcb_path: Path, platform: str, dry: bool) -> None:
+    """Write Content.mgcb entries for room *_opt.obj meshes (DesktopGL dev builds)."""
+    project_root = mgcb_path.parent.parent
+    rel_prefix = Path(os.path.relpath(src.resolve(), mgcb_path.parent.resolve())).as_posix()
+
+    lines = [
+        "",
+        "#----------------------------- Global Properties ----------------------------#",
+        "",
+        "/outputDir:bin/$(Platform)",
+        "/intermediateDir:obj/$(Platform)",
+        f"/platform:{platform}",
+        "/config:",
+        "/profile:Reach",
+        "/compress:False",
+        "",
+        "#-------------------------------- References --------------------------------#",
+        "",
+        "",
+        "#---------------------------------- Content ---------------------------------#",
+        "",
+    ]
+
+    prop_assets = [
+        ("GFX/map/leverbase", "leverbase.x"),
+        ("GFX/map/leverhandle", "leverhandle.x"),
+        ("GFX/map/monitor", "monitor.x"),
+        ("GFX/map/Button", "Button.x"),
+        ("GFX/map/door01", "Door01.x"),
+        ("GFX/map/doorframe", "DoorFrame.x"),
+        ("GFX/map/cambase", "cambase.x"),
+    ]
+    for asset_name, filename in prop_assets:
+        src_file = src / "GFX" / "map" / filename
+        if not src_file.exists():
+            continue
+        rel_src = f"{rel_prefix}/GFX/map/{filename}"
+        lines.extend([
+            f"#begin {asset_name}",
+            MGCB_MODEL_PARAMS,
+            f"/build:{rel_src}",
+            "",
+        ])
+
+    objs = sorted((src / "GFX" / "map").glob("*_opt.obj"))
+    for obj in objs:
+        stem = obj.stem
+        asset_name = f"GFX/map/{stem}"
+        rel_src = f"{rel_prefix}/GFX/map/{obj.name}"
+        lines.extend([
+            f"#begin {asset_name}",
+            MGCB_MODEL_PARAMS,
+            f"/build:{rel_src}",
+            "",
+        ])
+
+    content = "\n".join(lines) + "\n"
+    if dry:
+        print(f"  DRY: would write {mgcb_path} with {len(objs)} room meshes")
+        return
+    mgcb_path.write_text(content, encoding="utf-8")
+
+
+def cook_mesh(obj_path: Path, out_root: Path, dry: bool, platform: str = "Xbox360") -> tuple[bool, str]:
     stem    = obj_path.stem
     fbx_tmp = obj_path.with_suffix(".fbx")
     xnb_dir = out_root / MESH_SUBDIR
@@ -172,7 +296,7 @@ def cook_mesh(obj_path: Path, out_root: Path, dry: bool) -> tuple[bool, str]:
     # Target platform Xbox360 uses PowerPC alignment; MGCB handles byte order.
     mgcb_cmd = [
         MGCB_EXE,
-        f"/platform:Xbox360",
+        f"/platform:{platform}",
         f"/outputDir:{xnb_dir}",
         f"/build:{fbx_tmp};ModelProcessor",
     ]

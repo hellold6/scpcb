@@ -29,4 +29,9 @@
     <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.*" />
     <PackageReference Include="MonoGame.Content.Builder.Task" Version="3.8.*" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Data\**\*" CopyToOutputDirectory="PreserveNewest" LinkBase="Data" />
+    <None Include="GFX\**\*" CopyToOutputDirectory="PreserveNewest" LinkBase="GFX" />
+  </ItemGroup>
+
 </Project>

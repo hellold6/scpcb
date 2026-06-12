@@ -36,6 +36,15 @@ namespace SCPCB360.Engine
         // Active camera handle
         public static int ActiveCamera { get; private set; } = -1;
 
+        public static void SetActiveCamera(int handle) => ActiveCamera = handle;
+
+        public static void CameraRange(int camera, float near, float far)
+        {
+            // Stored for future projection tuning; RenderSystem uses fixed near/far today.
+            if (TryGet(camera, out var cam))
+                cam.CollisionRadius = near + far * 0.001f;
+        }
+
         // ── Initialisation (call once from Game.Initialize) ───────────────────────
 
         public static void Initialize(GraphicsDevice gfx, ContentManager content)
@@ -74,6 +83,23 @@ namespace SCPCB360.Engine
         }
 
         /// <summary>
+        /// LoadRMesh(rmeshPath$, [parent]) → handle
+        /// Loads visible geometry from CB's binary .rmesh room format at runtime.
+        /// </summary>
+        public static int LoadRMesh(string rmeshPath, int parent = -1)
+        {
+            var renderMesh = RMeshReader.LoadRenderMesh(rmeshPath);
+            if (renderMesh == null) return -1;
+
+            var e = Register(new BlitzEntity(SCPCB360.Engine.EntityType.Mesh, Path.GetFileNameWithoutExtension(rmeshPath)));
+            e.RMeshRenderMesh = renderMesh;
+            e.CollisionMesh = RMeshReader.BuildVisibleCollisionMesh(renderMesh);
+            e.CollisionType = 2;
+            if (parent != -1) EntityParent(e.Handle, parent);
+            return e.Handle;
+        }
+
+        /// <summary>
         /// CreateCamera([parent]) → handle
         /// </summary>
         public static int CreateCamera(int parent = -1)
@@ -104,9 +130,12 @@ namespace SCPCB360.Engine
         {
             if (!TryGet(src, out var s)) return -1;
             var e = Register(new BlitzEntity(s.Type, s.Name + "_copy"));
-            e.XnaModel   = s.XnaModel;
+            e.XnaModel = s.XnaModel;
+            e.RMeshRenderMesh = s.RMeshRenderMesh;
+            e.CollisionMesh = s.CollisionMesh;
             e.BoundingBox = s.BoundingBox;
             e.BrushHandle = s.BrushHandle;
+            e.CollisionType = s.CollisionType;
             if (parent != -1) EntityParent(e.Handle, parent);
             return e.Handle;
         }
@@ -127,8 +156,14 @@ namespace SCPCB360.Engine
         public static void TurnEntity(int h, float dp, float dy, float dr)
             => Get(h)?.Turn(dp, dy, dr);
 
+        public static void TurnEntity(int h, float dp, float dy, float dr, bool global)
+            => TurnEntity(h, dp, dy, dr);
+
         public static void ScaleEntity(int h, float sx, float sy, float sz)
             => Get(h)?.SetScale(sx, sy, sz);
+
+        public static void ScaleEntity(int h, float sx, float sy, float sz, bool global)
+            => ScaleEntity(h, sx, sy, sz);
 
         public static void AlignToVector(int h, float vx, float vy, float vz, int axis = 2)
         {
@@ -235,9 +270,32 @@ namespace SCPCB360.Engine
         {
             var key = NormalizePath(path);
             if (_textureCache.TryGetValue(key, out var cached)) return cached;
+
             try
             {
                 var tex = _content.Load<Texture2D>(key);
+                _textureCache[key] = tex;
+                return tex;
+            }
+            catch
+            {
+                // Fall through to disk load for raw GFX assets.
+            }
+
+            var diskPath = path.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+            if (!File.Exists(diskPath))
+                diskPath = Path.Combine("GFX", Path.GetFileName(diskPath));
+
+            if (!File.Exists(diskPath))
+            {
+                System.Diagnostics.Debug.WriteLine($"[B3D] LoadTexture failed: {path}");
+                return null;
+            }
+
+            try
+            {
+                using var stream = File.OpenRead(diskPath);
+                var tex = Texture2D.FromStream(_gfx, stream);
                 _textureCache[key] = tex;
                 return tex;
             }
@@ -267,6 +325,73 @@ namespace SCPCB360.Engine
                 e.CollisionRadius = xRadius;
         }
 
+        public static void EntityPickMode(int h, int mode, bool recursive = false)
+        {
+            if (!TryGet(h, out var e)) return;
+            e.PickMode = mode;
+            if (recursive)
+                foreach (var child in e.Children)
+                    EntityPickMode(child.Handle, mode, true);
+        }
+
+        public static int CreateSprite(int parent = -1)
+        {
+            var e = Register(new BlitzEntity(SCPCB360.Engine.EntityType.Sprite));
+            if (parent >= 0) EntityParent(e.Handle, parent);
+            return e.Handle;
+        }
+
+        public static void FreeTexture(int texHandle) { }
+
+        public static void SpriteViewMode(int h, int mode)
+        {
+            if (TryGet(h, out var e)) e.SpriteViewMode = mode;
+        }
+
+        public static void ScaleSprite(int h, float x, float y)
+        {
+            ScaleEntity(h, x, y, 1f);
+        }
+
+        public static int LoadAnimMesh(string path, int parent = -1)
+            => LoadMesh(path, parent);
+
+        private static int _nextTexHandle = 100000;
+        private static readonly Dictionary<int, Texture2D> _texHandles = new();
+
+        public static int LoadTextureHandle(string path, int flags = 0)
+        {
+            var tex = LoadTexture(path);
+            if (tex == null) return -1;
+            int h = _nextTexHandle++;
+            _texHandles[h] = tex;
+            return h;
+        }
+
+        public static void EntityTexture(int entity, Texture2D tex)
+        {
+            if (TryGet(entity, out var e)) e.Texture = tex;
+        }
+
+        public static void EntityTexture(int entity, int texHandle)
+        {
+            if (_texHandles.TryGetValue(texHandle, out var tex))
+                EntityTexture(entity, tex);
+        }
+
+        public static void EntityTexture(int entity, int texHandle, int frame)
+            => EntityTexture(entity, texHandle);
+
+        public static void EntityTexture(int entity, int texHandle, int frame, int flags)
+            => EntityTexture(entity, texHandle);
+
+        /// <summary>ResetEntity(entity) — clears physics state after teleport.</summary>
+        public static void ResetEntity(int h)
+        {
+            if (!TryGet(h, out _)) return;
+            // Physics integration resets velocities when player/NPC systems re-sample transforms.
+        }
+
         public static void Collisions(int srcType, int dstType, int method, int response)
         {
             // Blitz3D's Collisions() sets up pairs.
@@ -283,9 +408,13 @@ namespace SCPCB360.Engine
         public static float Sqr(float v) => (float)Math.Sqrt(v);
 
         // Blitz3D's Rand(min, max) is inclusive on both ends
-        private static readonly Random _rng = new();
+        private static Random _rng = new();
+        public static void SeedRnd(int seed) => _rng = new Random(seed);
         public static int Rand(int min, int max) => _rng.Next(min, max + 1);
+        public static int Rand(int max) => Rand(0, max);
         public static float Rnd(float min = 0f, float max = 1f) => (float)(_rng.NextDouble() * (max - min) + min);
+        public static float Cos(float degrees) => (float)Math.Cos(degrees * Math.PI / 180.0);
+        public static float Sin(float degrees) => (float)Math.Sin(degrees * Math.PI / 180.0);
 
         // ─────────────────────────────────────────────────────────────────────────
         // Internal helpers
