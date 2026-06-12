@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("scpcb")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1c5ca6aab39f768da893e396088120992e786a71")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+bd76a3108b7180a3b7d149b7b88810d4b7ecaad6")]
 [assembly: System.Reflection.AssemblyProductAttribute("scpcb")]
 [assembly: System.Reflection.AssemblyTitleAttribute("scpcb")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
