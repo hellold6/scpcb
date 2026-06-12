@@ -1,5 +1,4 @@
-// SCPCB360Game.cs
-// Temporary debug boot: loads one cooked 173 room model directly in front of the camera.
+// SCPCB360Game.cs — main game loop orchestrating all ported CB systems
 
 using System;
 using System.Collections.Generic;
@@ -18,18 +17,7 @@ namespace SCPCB360
         private GraphicsDeviceManager _gdm;
         private SpriteBatch _sb;
         private Texture2D _whitePixel;
-        private SoundEffect _aButtonSound;
 
-        private int _camPivot;
-        private int _cam;
-        private int _playerEnt;
-
-        private float _playerPitch = 0f;
-        private float _playerYaw = 0f;
-        private const float PitchLimit = 75f;
-        private const float PlayerMoveSpeed = 3.0f;
-
-        private bool _paused = false;
         private float _fps;
         private float _fpsTimer;
         private int _fpsFrames;
@@ -58,10 +46,13 @@ namespace SCPCB360
             ['F'] = new[] { "111", "100", "100", "111", "100", "100", "100" },
             ['H'] = new[] { "101", "101", "101", "111", "101", "101", "101" },
             ['M'] = new[] { "101", "111", "111", "101", "101", "101", "101" },
+            ['N'] = new[] { "101", "111", "111", "111", "101", "101", "101" },
             ['O'] = new[] { "111", "101", "101", "101", "101", "101", "111" },
             ['P'] = new[] { "111", "101", "101", "111", "100", "100", "100" },
             ['S'] = new[] { "111", "100", "100", "111", "001", "001", "111" },
             ['T'] = new[] { "111", "010", "010", "010", "010", "010", "010" },
+            ['U'] = new[] { "101", "101", "101", "101", "101", "101", "111" },
+            ['W'] = new[] { "101", "101", "101", "101", "111", "111", "101" },
             ['X'] = new[] { "101", "101", "101", "010", "101", "101", "101" },
             ['Y'] = new[] { "101", "101", "101", "010", "010", "010", "010" },
             ['Z'] = new[] { "111", "001", "001", "010", "100", "100", "111" },
@@ -71,9 +62,9 @@ namespace SCPCB360
         {
             _gdm = new GraphicsDeviceManager(this)
             {
-                PreferredBackBufferWidth = 1920,
-                PreferredBackBufferHeight = 1080,
-                IsFullScreen = true,
+                PreferredBackBufferWidth = 1280,
+                PreferredBackBufferHeight = 720,
+                IsFullScreen = false,
                 SynchronizeWithVerticalRetrace = true,
             };
 
@@ -84,16 +75,23 @@ namespace SCPCB360
 
         protected override void Initialize()
         {
+            DifficultySystem.Initialize();
+            AchievementSystem.Initialize();
+            MenuSystem.Initialize();
+            SaveSystem.LoadSaveGames();
+
             B3D.Initialize(GraphicsDevice, Content);
             RenderSystem.Initialize(GraphicsDevice);
             XInputRouter.InitializeMouseLook(GraphicsDevice.Viewport.Width / 2, GraphicsDevice.Viewport.Height / 2);
-            XInputRouter.Update();
 
             RenderSystem.AmbientColor = new Color(40, 40, 45);
             RenderSystem.FogEnabled = true;
             RenderSystem.FogColor = new Color(10, 10, 12);
             RenderSystem.FogStart = 0.5f;
-            RenderSystem.FogEnd = 2000f; // Wide debug fog so a giant model does not vanish instantly.
+            RenderSystem.FogEnd = 40f;
+
+            GameState.ShowFps = IniConfig.GetInt(GameState.OptionFile, "options", "show FPS", 0) != 0;
+            GameState.SfxVolume = IniConfig.GetFloat(GameState.OptionFile, "audio", "sound volume", 1f);
 
             base.Initialize();
         }
@@ -103,155 +101,228 @@ namespace SCPCB360
             _sb = new SpriteBatch(GraphicsDevice);
             _whitePixel = new Texture2D(GraphicsDevice, 1, 1);
             _whitePixel.SetData(new[] { Color.White });
-            _aButtonSound = CreateTechDemoBeep();
 
-            Console.WriteLine("SCPCB360 debug LoadContent started.");
+            TextRenderer.Initialize(GraphicsDevice);
+            GuiSystem.Initialize(GraphicsDevice);
+            BlurFilter.Initialize(GraphicsDevice);
+            PortalRenderer.Initialize(GraphicsDevice);
 
-            // Camera/player rig
-            _playerEnt = B3D.CreatePivot();
-            B3D.EntityType(_playerEnt, 1);
-            B3D.EntityRadius(_playerEnt, 0.4f);
-            B3D.PositionEntity(_playerEnt, 0f, 0f, 0f);
-            B3D.RotateEntity(_playerEnt, 0f, 0f, 0f);
+            AudioSystem.Initialize(Content);
+            MapAssets.Initialize();
+            DoorSystem.Initialize();
+            SecurityCamSystem.Initialize();
+            SkyboxSystem.Initialize();
 
-            _camPivot = B3D.CreatePivot(_playerEnt);
-            B3D.PositionEntity(_camPivot, 0f, 1.7f, 0f);
+            int collider = B3D.CreatePivot();
+            B3D.EntityType(collider, 1);
+            B3D.EntityRadius(collider, 0.4f);
 
-            _cam = B3D.CreateCamera(_camPivot);
-            B3D.RotateEntity(_cam, 0f, 0f, 0f);
+            int camPivot = B3D.CreatePivot(collider);
+            B3D.PositionEntity(camPivot, 0f, 1.7f, 0f);
 
-            // Load test mesh
-            int room = B3D.LoadMesh("173");
-            Console.WriteLine("Room handle = " + room);
+            int cam = B3D.CreateCamera(camPivot);
+            int head = B3D.CreatePivot(collider);
+            B3D.PositionEntity(head, 0f, 1.7f, 0f);
 
-            if (room == -1)
-                throw new Exception("B3D.LoadMesh returned -1 for 173");
-
-            var roomEntity = B3D.Get(room);
-            if (roomEntity == null)
-                throw new Exception("B3D.Get(room) returned null");
-
-            if (roomEntity.XnaModel == null)
-                throw new Exception("173 loaded an entity, but XnaModel is null");
-
-            Console.WriteLine("Room model loaded: " + roomEntity.Name);
-
-            // Position and scale room
-            B3D.PositionEntity(room, 0f, 0f, -20f);
-            B3D.ScaleEntity(room, 0.01f, 0.01f, 0.01f);
-
-            // Manually load collision mesh from RMESH file (test)
-            string rmeshPath = FindRMeshPath("173_opt.rmesh") ?? FindRMeshPath("173.rmesh");
-
-            if (rmeshPath != null)
-            {
-                var renderMesh = Engine.RMeshReader.LoadRenderMesh(rmeshPath);
-                if (renderMesh != null)
-                {
-                    roomEntity.RMeshRenderMesh = renderMesh;
-                    Console.WriteLine("Loaded render mesh: " + renderMesh.Surfaces.Count + " textured surfaces");
-
-                    var visibleCollisionMesh = Engine.RMeshReader.BuildVisibleCollisionMesh(renderMesh);
-                    if (visibleCollisionMesh != null)
-                    {
-                        Console.WriteLine("Loaded visible collision mesh: " + visibleCollisionMesh.TriangleCount + " triangles");
-                        roomEntity.CollisionMesh = visibleCollisionMesh;
-                        B3D.EntityType(room, 2);
-                    }
-                    else
-                        Console.WriteLine("Failed to build visible collision mesh");
-                }
-                else
-                    Console.WriteLine("Failed to load render mesh");
-
-                var hiddenCollisionMesh = Engine.RMeshReader.LoadCollisionMesh(rmeshPath);
-                Console.WriteLine(hiddenCollisionMesh != null
-                    ? "Hidden RMESH collision ignored for now: " + hiddenCollisionMesh.TriangleCount + " triangles"
-                    : "Hidden RMESH collision not available");
-            }
-            else
-                Console.WriteLine("RMESH file not found for 173 room");
-
+            PlayerSystem.Initialize(collider, head, camPivot, cam);
             B3D.Collisions(1, 2, 2, 2);
         }
 
         protected override void Update(GameTime gameTime)
         {
             float delta = (float)gameTime.ElapsedGameTime.TotalSeconds;
+            GameState.FpsFactor = delta * 60f;
+            GameState.FpsFactor2 = GameState.FpsFactor;
 
             XInputRouter.Update();
             XInputRouter.UpdateRumble(delta);
 
-            if (XInputRouter.IsPressed(CBAction.PauseMenu))
-                _paused = !_paused;
-
-            if (_paused)
+            switch (GameState.Screen)
             {
-                base.Update(gameTime);
-                return;
+                case GameScreen.MainMenu:
+                    MenuSystem.Update();
+                    break;
+
+                case GameScreen.Loading:
+                    if (MenuSystem.LoadingProgress >= 1f)
+                        GameState.Screen = GameScreen.Playing;
+                    break;
+
+                case GameScreen.Playing:
+                    UpdatePlaying(delta);
+                    break;
+
+                case GameScreen.Paused:
+                    if (XInputRouter.IsPressed(CBAction.PauseMenu))
+                        GameState.Screen = GameScreen.Playing;
+                    break;
+
+                case GameScreen.Dead:
+                    if (XInputRouter.IsPressed(CBAction.Interact))
+                        GameState.Screen = GameScreen.MainMenu;
+                    break;
             }
 
-            if (XInputRouter.IsPressed(CBAction.Interact))
-            {
-                _aButtonSound?.Play(0.6f, 0f, 0f);
-                XInputRouter.Rumble(0.2f, 0.35f, 0.08f);
-                Console.WriteLine("Tech Demo: A pressed");
-            }
+            if (XInputRouter.IsPressed(CBAction.PauseMenu) && GameState.Screen == GameScreen.Playing)
+                GameState.Screen = GameScreen.Paused;
 
-            var look = XInputRouter.GetLookDelta();
-            _playerYaw += look.X;
-            _playerPitch = MathHelper.Clamp(_playerPitch - look.Y, -PitchLimit, PitchLimit);
+            AudioSystem.UpdateMusic();
 
-            B3D.RotateEntity(_playerEnt, 0f, _playerYaw, 0f);
-            B3D.RotateEntity(_cam, _playerPitch, 0f, 0f);
-
-            float speed = XInputRouter.GetMoveSpeed(PlayerMoveSpeed) * delta;
-            float fwd = XInputRouter.GetForwardAxis();
-            float strafe = XInputRouter.GetStrafeAxis();
-
-            // Convert local input (forward/strafe) into world-space displacement using player yaw.
-            if (fwd != 0f || strafe != 0f)
-            {
-                var playerWorld = B3D.Get(_playerEnt).GetWorldMatrix();
-                var forward = Microsoft.Xna.Framework.Vector3.TransformNormal(Microsoft.Xna.Framework.Vector3.Forward, playerWorld);
-                var right = Microsoft.Xna.Framework.Vector3.TransformNormal(Microsoft.Xna.Framework.Vector3.Right, playerWorld);
-                forward.Y = 0f;
-                right.Y = 0f;
-                if (forward.LengthSquared() > 0.0001f) forward.Normalize();
-                if (right.LengthSquared() > 0.0001f) right.Normalize();
-
-                var moveVec = forward * fwd + right * strafe;
-                if (moveVec.LengthSquared() > 1f) moveVec.Normalize();
-                moveVec *= speed;
-
-                // Apply movement in world space by setting global position.
-                var currentPos = B3D.Get(_playerEnt).GetWorldPosition();
-                B3D.PositionEntity(_playerEnt, currentPos.X + moveVec.X, currentPos.Y + moveVec.Y, currentPos.Z + moveVec.Z, true);
-            }
-
-            if (XInputRouter.IsHeld(CBAction.Crouch))
-                B3D.PositionEntity(_camPivot, 0f, 1.0f, 0f);
-            else
-                B3D.PositionEntity(_camPivot, 0f, 1.7f, 0f);
-
-            PhysicsSystem.Update();
             UpdateFps(delta);
             base.Update(gameTime);
         }
 
+        private void UpdatePlaying(float delta)
+        {
+            PlayerSystem.MouseLook();
+            PlayerSystem.MovePlayer();
+
+            GameState.Crouch = XInputRouter.IsHeld(CBAction.Crouch);
+
+            if (XInputRouter.IsPressed(CBAction.Inventory))
+            {
+                GameState.InvOpen = !GameState.InvOpen;
+                if (GameState.InvOpen && GameState.InvHoverSlot == 66)
+                    GameState.InvHoverSlot = 0;
+            }
+
+            if (XInputRouter.IsPressed(CBAction.DropItem))
+            {
+                var drop = ItemSystem.SelectedItem ?? ItemSystem.GetHoveredInventoryItem();
+                if (drop != null)
+                    ItemSystem.DropItem(drop);
+            }
+
+            if (XInputRouter.IsPressed(CBAction.Interact) && !EventSystem.HandleIntroInteract())
+                HandleInteract();
+
+            void HandleInteract()
+            {
+                if (GameState.InvOpen)
+                {
+                    var slotItem = ItemSystem.GetHoveredInventoryItem();
+                    if (slotItem != null)
+                        ItemUseSystem.UseInventorySlot(GameState.InvHoverSlot);
+                    return;
+                }
+
+                if (ItemSystem.SelectedItem != null)
+                {
+                    if (GameState.ClosestDoor != null)
+                        DoorSystem.UseDoor(GameState.ClosestDoor);
+                    else
+                        ItemUseSystem.UseSelectedItem();
+                    return;
+                }
+
+                if (GameState.ClosestDoor != null)
+                {
+                    DoorSystem.UseDoor(GameState.ClosestDoor);
+                    return;
+                }
+
+                if (ItemSystem.ClosestItem != null)
+                    ItemSystem.PickupClosest();
+            }
+
+            DoorSystem.Update();
+            ItemSystem.Update(GameState.Collider);
+            NPCSystem.Update(delta, GameState.Collider);
+            EventSystem.Update();
+            ParticleSystem.Update();
+            DevilParticleSystem.UpdateParticlesDevil();
+            SkyboxSystem.Update(GameState.Camera);
+            AudioSystem.UpdateLoops(GameState.Camera);
+            MapSystem.UpdateRooms();
+            DecalSystem.Update();
+            SecurityCamSystem.Update();
+            ItemUseSystem.UpdateWearProgress();
+
+            PortalRenderer.UpdateAll();
+            BlurFilter.Update(delta);
+            GameState.BlurVolume = BlurFilter.BlurVolume;
+
+            if (GameState.MsgTimer > 0f)
+                GameState.MsgTimer -= GameState.FpsFactor;
+        }
+
         protected override void Draw(GameTime gameTime)
         {
-            GraphicsDevice.Clear(new Color(10, 10, 12));
-            RenderSystem.Draw();
-            DrawTechDemoOverlay();
+            if (GameState.Screen == GameScreen.Playing ||
+                GameState.Screen == GameScreen.Paused ||
+                GameState.Screen == GameScreen.Dead)
+            {
+                RenderSystem.Draw(captureScene: true);
+
+                _sb.Begin(SpriteSortMode.Deferred, BlendState.Opaque, SamplerState.PointClamp);
+                var scene = RenderSystem.SceneTexture;
+                if (scene != null)
+                    _sb.Draw(scene, GraphicsDevice.Viewport.Bounds, Color.White);
+                else
+                    _sb.Draw(_whitePixel, GraphicsDevice.Viewport.Bounds, new Color(10, 10, 12));
+                _sb.End();
+
+                BlurFilter.Draw(GameState.BlurVolume, RenderSystem.SceneTexture);
+            }
+            else
+            {
+                GraphicsDevice.Clear(new Color(10, 10, 12));
+            }
+
+            DrawOverlay();
             base.Draw(gameTime);
+        }
+
+        private void DrawOverlay()
+        {
+            if (_whitePixel == null || _sb == null) return;
+
+            _sb.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
+
+            switch (GameState.Screen)
+            {
+                case GameScreen.MainMenu:
+                    DrawMainMenu();
+                    break;
+                case GameScreen.Loading:
+                    DrawText("LOADING...", 18, 18, 4, new Color(220, 235, 255));
+                    DrawText(((int)(MenuSystem.LoadingProgress * 100f)).ToString() + "%", 18, 54, 3, Color.White);
+                    break;
+                case GameScreen.Playing:
+                case GameScreen.Paused:
+                case GameScreen.Dead:
+                    if (GameState.Screen == GameScreen.Paused)
+                        DrawText("PAUSED", 18, 18, 4, Color.White);
+                    GuiSystem.Draw(_sb);
+                    break;
+            }
+
+            if (GameState.ShowFps)
+                DrawText("FPS: " + _fps.ToString("0.0"), 18, GraphicsDevice.Viewport.Height - 30, 2, new Color(170, 220, 170));
+
+            _sb.End();
+        }
+
+        private void DrawMainMenu()
+        {
+            DrawText("SCP: CONTAINMENT BREACH", 18, 18, 3, new Color(200, 30, 30));
+            DrawText("XBOX 360 PORT", 18, 50, 2, new Color(180, 180, 180));
+            DrawText(MenuSystem.MenuStr, 18, 80, 2, new Color(80, 80, 80));
+
+            int y = 110;
+            foreach (var line in MenuSystem.GetVisibleLines())
+            {
+                var color = line.StartsWith('>') ? new Color(255, 220, 100) : new Color(200, 200, 200);
+                if (line.Contains("INCOMPATIBLE")) color = Color.Red;
+                DrawText(line, 30, y, 2, color);
+                y += 22;
+            }
         }
 
         private void UpdateFps(float delta)
         {
             _fpsTimer += delta;
             _fpsFrames++;
-
             if (_fpsTimer >= 0.25f)
             {
                 _fps = _fpsFrames / _fpsTimer;
@@ -260,34 +331,9 @@ namespace SCPCB360
             }
         }
 
-        private void DrawTechDemoOverlay()
-        {
-            if (_whitePixel == null || _sb == null)
-                return;
-
-            var player = B3D.Get(_playerEnt);
-            var pos = player?.GetWorldPosition() ?? Vector3.Zero;
-
-            _sb.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
-
-            DrawText("SCPCB360 TECH DEMO", 18, 18, 4, new Color(220, 235, 255));
-            DrawText("FPS: " + _fps.ToString("0.0"), 18, 54, 3, new Color(170, 220, 170));
-            DrawText(
-                "POS: X " + pos.X.ToString("0.00") +
-                " Y " + pos.Y.ToString("0.00") +
-                " Z " + pos.Z.ToString("0.00"),
-                18,
-                82,
-                3,
-                new Color(220, 220, 190));
-
-            _sb.End();
-        }
-
         private void DrawText(string text, int x, int y, int scale, Color color)
         {
             int cursor = x;
-
             foreach (char raw in text.ToUpperInvariant())
             {
                 if (!TechFont.TryGetValue(raw, out var glyph))
@@ -304,49 +350,6 @@ namespace SCPCB360
 
                 cursor += (glyph[0].Length + 1) * scale;
             }
-        }
-
-        private static SoundEffect CreateTechDemoBeep()
-        {
-            const int sampleRate = 22050;
-            const float duration = 0.12f;
-            const float frequency = 660f;
-            int samples = (int)(sampleRate * duration);
-            byte[] buffer = new byte[samples * 2];
-
-            for (int i = 0; i < samples; i++)
-            {
-                float t = i / (float)sampleRate;
-                float fade = 1f - (i / (float)samples);
-                short value = (short)(Math.Sin(t * frequency * MathHelper.TwoPi) * fade * short.MaxValue * 0.35f);
-                buffer[i * 2] = (byte)(value & 0xff);
-                buffer[i * 2 + 1] = (byte)((value >> 8) & 0xff);
-            }
-
-            return new SoundEffect(buffer, sampleRate, AudioChannels.Mono);
-        }
-
-        private static string FindRMeshPath(string fileName)
-        {
-            string[] roots =
-            {
-                AppDomain.CurrentDomain.BaseDirectory,
-                Environment.CurrentDirectory
-            };
-
-            foreach (string root in roots)
-            {
-                var dir = new System.IO.DirectoryInfo(root);
-                while (dir != null)
-                {
-                    string candidate = System.IO.Path.Combine(dir.FullName, "GFX", "map", fileName);
-                    if (System.IO.File.Exists(candidate))
-                        return candidate;
-                    dir = dir.Parent;
-                }
-            }
-
-            return null;
         }
     }
 }

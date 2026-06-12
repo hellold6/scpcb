@@ -21,6 +21,7 @@ namespace SCPCB360.Engine
     {
         private static GraphicsDevice _gfx;
         private static BasicEffect    _effect;
+        private static RenderTarget2D _sceneTarget;
 
         // Ambient + fog parameters (CB uses heavy fog to mask render distance)
         public static Color  AmbientColor    = new Color(40, 40, 45);
@@ -37,9 +38,12 @@ namespace SCPCB360.Engine
         private static readonly List<BlitzEntity> _opaques = new(256);
         private static readonly List<BlitzEntity> _alphas  = new(64);
 
+        public static Texture2D SceneTexture => _sceneTarget;
+
         public static void Initialize(GraphicsDevice gfx)
         {
             _gfx = gfx;
+            ResizeSceneTarget(gfx.Viewport.Width, gfx.Viewport.Height);
             _effect = new BasicEffect(gfx)
             {
                 TextureEnabled      = true,
@@ -56,7 +60,41 @@ namespace SCPCB360.Engine
         // Per-frame draw
         // ─────────────────────────────────────────────────────────────────────────
 
-        public static void Draw()
+        public static void ResizeSceneTarget(int width, int height)
+        {
+            if (_gfx == null) return;
+            _sceneTarget?.Dispose();
+            _sceneTarget = new RenderTarget2D(_gfx, width, height, false, SurfaceFormat.Color, DepthFormat.Depth24);
+        }
+
+        public static void Draw(int cameraHandle = -1, bool captureScene = false)
+        {
+            int prevCamera = B3D.ActiveCamera;
+            if (cameraHandle != -1)
+                B3D.SetActiveCamera(cameraHandle);
+
+            var prevTargets = captureScene && cameraHandle == -1 ? _gfx.GetRenderTargets() : null;
+            if (captureScene && cameraHandle == -1 && _sceneTarget != null)
+            {
+                _gfx.SetRenderTarget(_sceneTarget);
+                _gfx.Clear(new Color(10, 10, 12));
+            }
+
+            try
+            {
+                DrawInternal();
+            }
+            finally
+            {
+                if (captureScene && cameraHandle == -1 && prevTargets != null)
+                    _gfx.SetRenderTargets(prevTargets);
+
+                if (cameraHandle != -1)
+                    B3D.SetActiveCamera(prevCamera);
+            }
+        }
+
+        private static void DrawInternal()
         {
             // 1. Build camera matrices from active camera entity
             BuildCameraMatrices();
@@ -99,6 +137,15 @@ namespace SCPCB360.Engine
             }
         }
 
+        public static void DrawToTarget(RenderTarget2D target, int cameraHandle, Color clearColor)
+        {
+            var prevTarget = _gfx.GetRenderTargets();
+            _gfx.SetRenderTarget(target);
+            _gfx.Clear(clearColor);
+            Draw(cameraHandle);
+            _gfx.SetRenderTargets(prevTarget);
+        }
+
         private static void DrawEntity(BlitzEntity e)
         {
             var world = e.GetWorldMatrix();
@@ -108,6 +155,8 @@ namespace SCPCB360.Engine
                 DrawRMesh(e, world);
                 return;
             }
+
+            if (e.XnaModel == null) return;
 
             foreach (var mesh in e.XnaModel.Meshes)
             {
@@ -120,6 +169,11 @@ namespace SCPCB360.Engine
                     // Apply entity-level colour tint and alpha
                     fx.DiffuseColor = e.EntityColor.ToVector3();
                     fx.Alpha        = e.Alpha;
+                    if (e.PortalTexture != null)
+                    {
+                        fx.Texture = e.PortalTexture;
+                        fx.TextureEnabled = true;
+                    }
 
                     // Fog — match parameters in case they changed this frame
                     fx.FogEnabled = FogEnabled;

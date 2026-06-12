@@ -208,6 +208,9 @@ namespace SCPCB360.Input
             && _current.IsButtonUp(btn)
             && _previous.IsButtonDown(btn);
 
+        public static bool IsDpadPressed(Buttons button)
+            => _current.IsButtonDown(button) && _previous.IsButtonUp(button);
+
         // ─────────────────────────────────────────────────────────────────────────
         // Rumble (replaces Win32 XInputSetState calls CB doesn't have but we can add)
         // ─────────────────────────────────────────────────────────────────────────

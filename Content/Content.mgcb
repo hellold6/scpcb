@@ -12,20 +12,9 @@
 
 
 #---------------------------------- Content ---------------------------------#
-
-#begin 173.fbx
-/importer:FbxImporter
-/processor:ModelProcessor
-/processorParam:ColorKeyColor=255,0,255,255
-/processorParam:ColorKeyEnabled=True
-/processorParam:DefaultEffect=BasicEffect
-/processorParam:GenerateMipmaps=True
-/processorParam:GenerateTangentFrames=False
-/processorParam:PremultiplyTextureAlpha=True
-/processorParam:PremultiplyVertexColors=True
-/processorParam:ResizeTexturesToPowerOfTwo=False
-/processorParam:RotationX=0
-/processorParam:Scale=1
-/processorParam:SwapWindingOrder=False
-/processorParam:TextureFormat=Color
-/build:173.fbx
+#
+# Room meshes load at runtime from GFX/map/*.rmesh (see MapSystem.EnsureTemplateMesh).
+# Prop .x/.b3d assets require MGCB + assimp, which needs x64 Windows for the content
+# pipeline. Regenerate entries with:
+#   python files/cook_assets.py --src . --out Content/bin --mgcb --skip-mesh --skip-tex --skip-audio
+#

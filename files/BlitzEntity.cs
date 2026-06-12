@@ -50,7 +50,11 @@ namespace SCPCB360.Engine
         // ── Mesh data (Mesh/Sprite entities only) ─────────────────────────────────
         public Model XnaModel { get; set; }             // Loaded from .xnb
         public RMeshRenderMesh RMeshRenderMesh { get; set; } // Optional runtime RMESH geometry
+        public Texture2D PortalTexture { get; set; }     // Render-to-texture portals (DrawPortals.bb)
+        public Texture2D Texture { get; set; }           // EntityTexture()
         public int BrushHandle { get; set; } = -1;      // Painted brush reference
+        public int PickMode { get; set; }
+        public int SpriteViewMode { get; set; }
 
         // ── Physics / collision ───────────────────────────────────────────────────
         // Blitz3D EntityType() values: 0=none,1=sphere,2=box,3=polygon,4=box-triggers
