@@ -32,4 +32,3 @@ C:\Users\Willi\scpcb\obj\Debug\net9.0\refint\scpcb.dll
 C:\Users\Willi\scpcb\obj\Debug\net9.0\scpcb.pdb
 C:\Users\Willi\scpcb\obj\Debug\net9.0\scpcb.genruntimeconfig.cache
 C:\Users\Willi\scpcb\obj\Debug\net9.0\ref\scpcb.dll
-C:\Users\Willi\scpcb\bin\Debug\net9.0\Content\173.xnb
